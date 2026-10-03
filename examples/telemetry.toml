@@ -1,0 +1,20 @@
+# Telemetry sent on USART3 (PD8) once a second, in serial-decoder's schema format.
+# Each packet: message ID, little-endian fields in this order, CRC-16/CCITT-FALSE;
+# COBS-encoded and terminated by 0x00.
+
+[[message]]
+id = 0x01
+name = "status"
+fields = [
+  { name = "uptime", type = "u32", unit = "ms" },
+  { name = "led", type = "u8" },
+]
+
+[[message]]
+id = 0x02
+name = "console_stats"
+fields = [
+  { name = "rx_bytes", type = "u32" },
+  { name = "tx_bytes", type = "u32" },
+  { name = "rx_dropped", type = "u32" },
+]
