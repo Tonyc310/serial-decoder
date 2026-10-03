@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import serial
 
 from serial_decoder.cli import main
 
@@ -52,3 +53,42 @@ def test_schema_errors_exit_with_status_2(
 
     assert main(["--schema", str(missing), str(CAPTURE)]) == 2
     assert str(missing) in capsys.readouterr().err
+
+
+class FakePort:
+    """Hands out reads like pyserial, then raises KeyboardInterrupt as if Ctrl-C was pressed."""
+
+    def __init__(self, reads: list[bytes]) -> None:
+        self._reads = reads
+
+    def __enter__(self) -> "FakePort":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        pass
+
+    def read(self, size: int) -> bytes:
+        if not self._reads:
+            raise KeyboardInterrupt
+        return self._reads.pop(0)
+
+
+def test_decodes_a_live_port_until_ctrl_c(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = CAPTURE.read_bytes()
+    port = FakePort([data[:50], b"", data[50:]])  # b"" is a read that timed out
+    opened: list[tuple[str, int]] = []
+
+    def open_port(url: str, baudrate: int, timeout: float) -> FakePort:
+        opened.append((url, baudrate))
+        return port
+
+    monkeypatch.setattr(serial, "serial_for_url", open_port)
+
+    assert main(["--schema", SCHEMA, "--port", "socket://localhost:3456", "--baud", "9600"]) == 0
+
+    assert opened == [("socket://localhost:3456", 9600)]
+    out, err = capsys.readouterr()
+    assert len(out.splitlines()) == 10
+    assert err == "10 frames decoded, 0 bad\n"
